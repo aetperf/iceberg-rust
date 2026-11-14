@@ -263,6 +263,11 @@ impl DataFile {
     pub fn file_format(&self) -> DataFileFormat {
         self.file_format
     }
+    /// Get the id of the partition spec the file was written with (aetperf fork addition).
+    pub fn partition_spec_id(&self) -> i32 {
+        self.partition_spec_id
+    }
+
     /// Get the partition values of the file.
     pub fn partition(&self) -> &Struct {
         &self.partition
