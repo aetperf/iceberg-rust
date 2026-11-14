@@ -640,6 +640,22 @@ impl ArrowSchemaVisitor for ArrowSchemaConverter {
             DataType::Time64(unit) if unit == &TimeUnit::Microsecond => {
                 Ok(Type::Primitive(PrimitiveType::Time))
             }
+            // aetperf: files written by other engines may hold millisecond times and
+            // timestamps (the legacy TIME_MILLIS and TIMESTAMP_MILLIS annotations,
+            // which Parquet.Net still writes). Iceberg stores microseconds: the
+            // reader casts them.
+            DataType::Time32(unit) if unit == &TimeUnit::Millisecond => {
+                Ok(Type::Primitive(PrimitiveType::Time))
+            }
+            DataType::Timestamp(unit, None) if unit == &TimeUnit::Millisecond => {
+                Ok(Type::Primitive(PrimitiveType::Timestamp))
+            }
+            DataType::Timestamp(unit, Some(zone))
+                if unit == &TimeUnit::Millisecond
+                    && (zone.as_ref() == "UTC" || zone.as_ref() == "+00:00") =>
+            {
+                Ok(Type::Primitive(PrimitiveType::Timestamptz))
+            }
             DataType::Timestamp(unit, None) if unit == &TimeUnit::Microsecond => {
                 Ok(Type::Primitive(PrimitiveType::Timestamp))
             }
