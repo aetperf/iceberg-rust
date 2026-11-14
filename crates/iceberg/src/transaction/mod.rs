@@ -57,6 +57,7 @@ mod append;
 mod expire_snapshots;
 mod overwrite;
 mod row_delta;
+mod set_schema;
 mod snapshot;
 mod sort_order;
 mod update_location;
@@ -79,6 +80,7 @@ pub use crate::transaction::append::FastAppendAction;
 pub use crate::transaction::expire_snapshots::ExpireSnapshotsAction;
 pub use crate::transaction::overwrite::OverwriteAction;
 pub use crate::transaction::row_delta::{RowDeltaAction, live_files};
+pub use crate::transaction::set_schema::SetSchemaAction;
 pub use crate::transaction::sort_order::ReplaceSortOrderAction;
 pub use crate::transaction::update_location::UpdateLocationAction;
 pub use crate::transaction::update_properties::UpdatePropertiesAction;
@@ -137,6 +139,11 @@ impl Transaction {
     /// Sets table to a new version.
     pub fn upgrade_table_version(&self) -> UpgradeFormatVersionAction {
         UpgradeFormatVersionAction::new()
+    }
+
+    /// Replaces the current schema by the given one (aetperf fork addition).
+    pub fn set_schema(&self, schema: crate::spec::Schema) -> SetSchemaAction {
+        SetSchemaAction::new(schema)
     }
 
     /// Update table's property.
