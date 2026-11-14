@@ -106,6 +106,29 @@ impl DeleteVector {
         }
     }
 
+    /// Serializes this vector as a `deletion-vector-v1` Puffin blob, the inverse of
+    /// [`DeleteVector::deserialize`] (aetperf fork addition).
+    pub fn serialize(&self) -> Result<Vec<u8>> {
+        let mut vector = Vec::new();
+        let bitmaps: Vec<_> = self.inner.bitmaps().collect();
+        vector.extend_from_slice(&(bitmaps.len() as u64).to_le_bytes());
+        for (key, bitmap) in bitmaps {
+            vector.extend_from_slice(&key.to_le_bytes());
+            bitmap.serialize_into(&mut vector).map_err(|e| {
+                Error::new(ErrorKind::Unexpected, "failed to encode roaring bitmap").with_source(e)
+            })?;
+        }
+
+        let body_len = DV_MAGIC_BYTES + vector.len();
+        let mut blob = Vec::with_capacity(DV_LENGTH_PREFIX_BYTES + body_len + DV_CRC_BYTES);
+        blob.extend_from_slice(&(body_len as u32).to_be_bytes());
+        blob.extend_from_slice(&DV_MAGIC);
+        blob.extend_from_slice(&vector);
+        let crc = crc32fast::hash(&blob[DV_LENGTH_PREFIX_BYTES..]);
+        blob.extend_from_slice(&crc.to_be_bytes());
+        Ok(blob)
+    }
+
     /// Parses a `deletion-vector-v1` Puffin blob into a `DeleteVector`.
     ///
     /// The layout, defined by the Iceberg Puffin spec and matching Iceberg-Java's
