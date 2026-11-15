@@ -819,6 +819,12 @@ impl FileWrite for OpenDalWriter {
         Ok(())
     }
 
+    async fn abort(&mut self) -> Result<()> {
+        opendal::Writer::abort(&mut self.inner)
+            .await
+            .map_err(from_opendal_error)
+    }
+
     async fn close(&mut self) -> Result<FileMetadata> {
         let metadata = opendal::Writer::close(&mut self.inner)
             .await

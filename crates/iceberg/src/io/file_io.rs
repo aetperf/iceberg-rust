@@ -379,6 +379,13 @@ pub trait FileWrite: Send + Unpin + 'static {
     ///
     /// Calling close on closed file will generate an error.
     async fn close(&mut self) -> Result<FileMetadata>;
+
+    /// Abandons the file: releases what the storage holds for a write that will
+    /// not be closed, such as the parts of a multipart upload (aetperf fork
+    /// addition). The default does nothing.
+    async fn abort(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Output file is used for writing to files..
