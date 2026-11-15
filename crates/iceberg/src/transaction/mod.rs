@@ -54,6 +54,7 @@ mod action;
 
 pub use action::*;
 mod append;
+mod assert_unchanged;
 mod expire_snapshots;
 mod overwrite;
 mod row_delta;
@@ -80,6 +81,7 @@ pub use crate::transaction::append::FastAppendAction;
 pub use crate::transaction::expire_snapshots::ExpireSnapshotsAction;
 pub use crate::transaction::overwrite::OverwriteAction;
 pub use crate::transaction::row_delta::{RowDeltaAction, live_files};
+pub use crate::transaction::assert_unchanged::AssertUnchangedAction;
 pub use crate::transaction::set_schema::SetSchemaAction;
 pub use crate::transaction::sort_order::ReplaceSortOrderAction;
 pub use crate::transaction::update_location::UpdateLocationAction;
@@ -139,6 +141,12 @@ impl Transaction {
     /// Sets table to a new version.
     pub fn upgrade_table_version(&self) -> UpgradeFormatVersionAction {
         UpgradeFormatVersionAction::new()
+    }
+
+    /// Asserts that the schema and the partition spec are those of the table the
+    /// transaction was created on (aetperf fork addition).
+    pub fn assert_unchanged(&self) -> AssertUnchangedAction {
+        AssertUnchangedAction::new()
     }
 
     /// Replaces the current schema by the given one (aetperf fork addition).
@@ -248,6 +256,13 @@ impl Transaction {
             self.table = refreshed.clone();
         }
 
+        let table_commit = self.build_commit().await?;
+        catalog.update_table(table_commit).await
+    }
+
+    /// Runs the actions against the transaction's table and gathers their
+    /// updates and requirements.
+    async fn build_commit(&mut self) -> Result<TableCommit> {
         let mut current_table = self.table.clone();
         let mut existing_updates: Vec<TableUpdate> = vec![];
         let mut existing_requirements: Vec<TableRequirement> = vec![];
@@ -263,13 +278,33 @@ impl Transaction {
             )?;
         }
 
-        let table_commit = TableCommit::builder()
+        Ok(TableCommit::builder()
             .ident(self.table.identifier().to_owned())
             .updates(existing_updates)
             .requirements(existing_requirements)
-            .build();
+            .build())
+    }
 
-        catalog.update_table(table_commit).await
+    /// Builds the commit of this transaction against the table it was created
+    /// on, without loading the table again and without sending anything
+    /// (aetperf fork addition). The caller sends it with
+    /// [`Catalog::update_table`].
+    ///
+    /// [`Transaction::commit`] loads the table again and rebases the actions
+    /// onto whatever it finds, at every attempt, the first included. A writer
+    /// that planned row-level changes against one snapshot needs the catalog to
+    /// refuse the commit when the table has moved since, and to decide by
+    /// itself what to do then: the requirements built here assert the snapshot
+    /// the transaction was created on.
+    pub async fn into_table_commit(mut self) -> Result<TableCommit> {
+        if self.table.readonly() {
+            return Err(Error::new(
+                ErrorKind::PreconditionFailed,
+                "Cannot modify a read-only table",
+            )
+            .with_context("table", self.table.identifier().to_string()));
+        }
+        self.build_commit().await
     }
 }
 
